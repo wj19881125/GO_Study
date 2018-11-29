@@ -22,8 +22,33 @@ var slice [6]int
 
 var m map[int]string
 
+type KK struct {
+	a int
+	b int
+}
+
 func main() {
 
+	inta := 10
+	intb := 3
+	//fmt.Println(float64(inta) / float64(intb))
+	s := fmt.Sprintf("%f", float64(inta)/float64(intb))
+	fmt.Println(s)
+
+	cc := KK{a: 12}
+	fmt.Println(cc)
+	cc.b = 13
+	fmt.Println(cc)
+	dd := make(map[string]*KK, 10)
+	dd["1223"] = &KK{a: 12}
+	fmt.Println(dd)
+	ee := dd["1223"]
+	ee.b = 14
+	for k, v := range dd {
+		fmt.Println(k, v.a, v.b)
+	}
+
+	return
 	m = make(map[int]string)
 	m[1] = "1"
 	m[2] = "2"

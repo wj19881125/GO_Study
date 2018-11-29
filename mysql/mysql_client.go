@@ -133,7 +133,7 @@ func main() {
 	}
 	var userData raiingTCMSUser
 	userUUIDS := make(map[string]string, 10) // 用户UUID
-	postST := make(map[string]POST_ST, 10)
+	postST := make(map[string]*POST_ST, 10)
 
 	for rows3.Next() {
 		err := rows3.Scan(&userData.id, &userData.uuid, &userData.caseNum, &userData.bedNum, &userData.name,
@@ -143,9 +143,9 @@ func main() {
 		checkErr(err)
 		userUUIDS[userData.uuid] = userData.caseNum
 		if userData.sex == 1 { // 1为男性
-			postST[userData.uuid] = POST_ST{sex: true}
+			postST[userData.uuid] = &POST_ST{sex: true}
 		} else { // 2为女性
-			postST[userData.uuid] = POST_ST{sex: false}
+			postST[userData.uuid] = &POST_ST{sex: false}
 		}
 	}
 	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
@@ -177,6 +177,8 @@ func main() {
 		checkErr(err)
 	}
 	w.Flush()
+
+	//userUUIDCount := 0
 
 	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
@@ -221,6 +223,10 @@ func main() {
 			}
 			err = json.Unmarshal([]byte(tcmsData.data), &tempDataArray)
 			for _, data := range tempDataArray {
+				// 只统计稳定以后的温度
+				if data.Stable < 2 {
+					continue
+				}
 				temperatureValue := data.Temp
 				if temperatureValue < 36000 {
 					below360 += TEMPERATURE_INTERVAL
@@ -251,21 +257,6 @@ func main() {
 		}
 		fmt.Println("查询结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
 		fmt.Println("数据库记录条数: ", count)
-		//// 总跨度时间
-		//fmt.Println(time.Unix(startTime, 0).Format("2006-01-02 15:04:05"), time.Unix(endTime, 0).Format("2006-01-02 15:04:05"), endTime-startTime)
-		//fmt.Println("35<T≤36℃时长: ", between350And360)
-		//fmt.Println("T>37.5℃时长: ", exceed375Time)
-		//fmt.Println("37.5<T≤38.0℃时长: ", between375And380)
-		//fmt.Println("38.0<T≤38.5℃时长: ", between380And385)
-		//fmt.Println("T>38.5℃时长: ", exceed385Time)
-		//fmt.Println("最高体温: ", maxTemperature)
-		//fmt.Println("术后总测量时长: ", continueTime)
-		//fmt.Println(startTime, endTime, endTime-startTime)
-
-		//if err := rows.Err(); err != nil {
-		//	log.Fatal(err)
-		//}
-
 		if err != nil {
 			panic(err)
 		}
@@ -293,13 +284,13 @@ func main() {
 		w := csv.NewWriter(csvFile) //创建一个新的写入文件流
 		data := []string{
 			v, // 病人ID
-			strconv.Itoa(int(between350And360)),
-			strconv.Itoa(int(exceed375Time)),
-			strconv.Itoa(int(between375And380)),
-			strconv.Itoa(int(between380And385)),
-			strconv.Itoa(int(exceed385Time)),
+			fmt.Sprintf("%.2f", float64(between350And360)/60),
+			fmt.Sprintf("%.2f", float64(exceed375Time)/60),
+			fmt.Sprintf("%.2f", float64(between375And380)/60),
+			fmt.Sprintf("%.2f", float64(between380And385)/60),
+			fmt.Sprintf("%.2f", float64(exceed385Time)/60),
 			strconv.Itoa(int(maxTemperature)),
-			strconv.Itoa(int(continueTime)),
+			fmt.Sprintf("%.2f", float64(continueTime)/3600), // 小时
 			strconv.Itoa(int(hangzhanCount)),
 			strconv.Itoa(int(zhanwangCount)),
 		}
@@ -328,133 +319,18 @@ func main() {
 		if zhanwangCount > 0 {
 			post.isZhanwang = true
 		}
+		//userUUIDCount ++
+		//if userUUIDCount > 10 {
+		//	break
+		//}
 	}
 	fmt.Println("结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
-	maleCount := 0   // 男患者个数
-	femaleCount := 0 // 女患者个数
-	below360MaleCount := 0
-	between375And380MaleCount := 0
-	between380And385MaleCount := 0
-	exceed385MaleCount := 0
-	hanzhanMaleCount := 0
-	zhanwangMaleCount := 0
-	below360FemaleCount := 0
-	between375And380FemaleCount := 0
-	between380And385FemaleCount := 0
-	exceed385FemaleCount := 0
-	hanzhanFemaleCount := 0
-	zhanwangFemaleCount := 0
-	for _, v := range postST {
-		if v.sex {
-			maleCount++
-			if v.below360 {
-				below360MaleCount++
-			}
-			if v.between375And380 {
-				between375And380MaleCount++
-			}
-			if v.between380And385 {
-				between380And385MaleCount++
-			}
-			if v.exceed385 {
-				exceed385MaleCount++
-			}
-			if v.isHanzhan {
-				hanzhanMaleCount++
-			}
-			if v.isZhanwang {
-				zhanwangMaleCount++
-			}
-		} else {
-			femaleCount++
-			if v.below360 {
-				below360FemaleCount++
-			}
-			if v.between375And380 {
-				between375And380FemaleCount++
-			}
-			if v.between380And385 {
-				between380And385FemaleCount++
-			}
-			if v.exceed385 {
-				exceed385FemaleCount++
-			}
-			if v.isHanzhan {
-				hanzhanFemaleCount++
-			}
-			if v.isZhanwang {
-				zhanwangFemaleCount++
-			}
-		}
-	}
-	fmt.Println("男个数: ", maleCount,
-		"低于360个数: ", below360MaleCount,
-		"大于375小于380个数: ", between375And380MaleCount,
-		"大于380小于385个数: ", between380And385MaleCount,
-		"超过385个数: ", exceed385MaleCount,
-		"寒战个数: ", hanzhanMaleCount,
-		"谵妄个数: ", zhanwangMaleCount)
-	fmt.Println("女个数: ", femaleCount,
-		"低于360个数: ", below360FemaleCount,
-		"大于375小于380个数: ", between375And380FemaleCount,
-		"大于380小于385个数: ", between380And385FemaleCount,
-		"超过385个数: ", exceed385FemaleCount,
-		"寒战个数: ", hanzhanFemaleCount,
-		"谵妄个数: ", zhanwangFemaleCount)
-	// 创建CSV文件，用于保存记录
-	csvFile1, err := os.Create("tcms_statistics1_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer csvFile1.Close()
-	_, _ = csvFile1.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
-	w1 := csv.NewWriter(csvFile1)               //创建一个新的写入文件流
-	data1 := [][]string{
-		{"性别",
-			"低于36℃发生率",
-			"37.5-38.0℃发生率",
-			"38.0-38.5℃发生率",
-			"高于38.5℃发生率",
-			"寒战发生率",
-			"谵妄发生率",},
-		{
-			"男",
-			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)),
-		},
-		{
-			"女",
-			fmt.Sprintf("%f", float64(below360FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between375And380FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between380And385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(exceed385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(hanzhanFemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(zhanwangFemaleCount)/float64(femaleCount)),
-		},
-		{
-			"全部",
-			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)+float64(below360FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)+float64(between375And380FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)+float64(between380And385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)+float64(exceed385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)+float64(hanzhanFemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)+float64(zhanwangFemaleCount)/float64(femaleCount)),
-		},
-	}
-	err = w1.WriteAll(data1)
-	if err != nil {
-		checkErr(err)
-	}
-	w1.Flush()
 
+	// 产生统计表格
+	gen(postST)
 }
 
-func gen(postST *map[string]POST_ST) {
+func gen(postST map[string]*POST_ST) {
 	maleCount := 0   // 男患者个数
 	femaleCount := 0 // 女患者个数
 	below360MaleCount := 0
@@ -545,30 +421,30 @@ func gen(postST *map[string]POST_ST) {
 			"谵妄发生率",},
 		{
 			"男",
-			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)),
-			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(below360MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(between375And380MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(between380And385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(exceed385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(hanzhanMaleCount)/float64(maleCount)),
+			fmt.Sprintf("%.2f", float64(zhanwangMaleCount)/float64(maleCount)),
 		},
 		{
 			"女",
-			fmt.Sprintf("%f", float64(below360FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between375And380FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between380And385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(exceed385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(hanzhanFemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(zhanwangFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(zhanwangFemaleCount)/float64(femaleCount)),
 		},
 		{
 			"全部",
-			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)+float64(below360FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)+float64(between375And380FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)+float64(between380And385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)+float64(exceed385FemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)+float64(hanzhanFemaleCount)/float64(femaleCount)),
-			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)+float64(zhanwangFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(below360MaleCount)/float64(maleCount)+float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(between375And380MaleCount)/float64(maleCount)+float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(between380And385MaleCount)/float64(maleCount)+float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(exceed385MaleCount)/float64(maleCount)+float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(hanzhanMaleCount)/float64(maleCount)+float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(zhanwangMaleCount)/float64(maleCount)+float64(zhanwangFemaleCount)/float64(femaleCount)),
 		},
 	}
 	err = w1.WriteAll(data1)
