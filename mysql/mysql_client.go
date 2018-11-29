@@ -36,16 +36,16 @@ type raiingTCMSUser struct {
 	uuid           string
 	caseNum        string // 病人ID
 	bedNum         int
-	name           int
+	name           string
 	sex            int
-	birthday       string
+	birthday       interface{}
 	model          int
 	height         int
 	weight         int
 	inHospitalTime int64
 	pacing         int
-	hospital       string
-	department     string
+	hospital       interface{}
+	department     interface{}
 	status         int
 	addTime        int64
 	addId          int
@@ -103,6 +103,17 @@ type raiingTCMSEventData struct {
 	lastUpdateTime int64
 }
 
+// 术后统计
+type POST_ST struct {
+	sex              bool // 男true，女false
+	below360         bool
+	between375And380 bool
+	between380And385 bool
+	exceed385        bool
+	isHanzhan        bool
+	isZhanwang       bool
+}
+
 func main() {
 	dbw := DbWorker{
 		Dsn: "root:123456@tcp(127.0.0.1:3306)/raiing_tcms_v6_temp",
@@ -115,34 +126,27 @@ func main() {
 	}
 	fmt.Println("数据库打开成功！")
 	defer db.Close()
-	//rows1, err := db.Query("SELECT b2w_sn, hardware_sn FROM " + TEMP_TABLE_NAME)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//b2wSNs := make(map[string]interface{}, 10)
-	//hardwareSNs := make(map[string]interface{}, 10)
-	//for rows1.Next() {
-	//	var b2wSN string
-	//	var hardwareSN string
-	//	err := rows1.Scan(&b2wSN, &hardwareSN)
-	//	checkErr(err)
-	//	b2wSNs[strings.Trim(b2wSN, " ")] = "_"
-	//	hardwareSNs[strings.Trim(hardwareSN, " ")] = "_"
-	//}
-	//fmt.Println("705序列号: ", len(hardwareSNs), hardwareSNs)
-	//fmt.Println("B2W序列号: ", len(b2wSNs), b2wSNs)
 
-	rows3, err := db.Query("SELECT uuid, case_num FROM " + USER_TABLE_NAME)
+	rows3, err := db.Query("SELECT * FROM " + USER_TABLE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
+	var userData raiingTCMSUser
 	userUUIDS := make(map[string]string, 10) // 用户UUID
+	postST := make(map[string]POST_ST, 10)
+
 	for rows3.Next() {
-		var userUUID string
-		var caseNum string
-		err := rows3.Scan(&userUUID, &caseNum)
+		err := rows3.Scan(&userData.id, &userData.uuid, &userData.caseNum, &userData.bedNum, &userData.name,
+			&userData.sex, &userData.birthday, &userData.model, &userData.height, &userData.weight,
+			&userData.inHospitalTime, &userData.pacing, &userData.hospital, &userData.department, &userData.status,
+			&userData.addTime, &userData.addId, &userData.lastUpdateTime, &userData.lastUpdateId)
 		checkErr(err)
-		userUUIDS[userUUID] = caseNum
+		userUUIDS[userData.uuid] = userData.caseNum
+		if userData.sex == 1 { // 1为男性
+			postST[userData.uuid] = POST_ST{sex: true}
+		} else { // 2为女性
+			postST[userData.uuid] = POST_ST{sex: false}
+		}
 	}
 	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
 
@@ -193,6 +197,7 @@ func main() {
 		var tempDataArray []temperatureData
 		var count int
 		var continueTime int64     // 持续时间
+		var below360 int64         // 低于36
 		var between350And360 int64 // 大于35，小于等于36
 		var exceed375Time int64    // 大于37.5
 		var between375And380 int64 // 大于37.5，小于等于38
@@ -214,12 +219,12 @@ func main() {
 			if endTime < tcmsData.time {
 				endTime = tcmsData.time
 			}
-			//fmt.Printf("%s is %s\n", tcmsData.hardwareSn, tcmsData.b2wSn)
-			//fmt.Println(tcmsData.b2wSn, tcmsData.data)
-			//s := `{"time":1540859820,"temp":36842,"wear_quality":81,"stable":3,"wear_stage":1,"add_time":1540859881}`
 			err = json.Unmarshal([]byte(tcmsData.data), &tempDataArray)
 			for _, data := range tempDataArray {
 				temperatureValue := data.Temp
+				if temperatureValue < 36000 {
+					below360 += TEMPERATURE_INTERVAL
+				}
 				if temperatureValue > 35000 && temperatureValue <= 36000 {
 					between350And360 += TEMPERATURE_INTERVAL
 				}
@@ -304,7 +309,271 @@ func main() {
 		}
 		w.Flush()
 
+		var post = postST[k]
+		if below360 > 0 {
+			post.below360 = true
+		}
+		if between375And380 > 0 {
+			post.between375And380 = true
+		}
+		if between380And385 > 0 {
+			post.between380And385 = true
+		}
+		if exceed385Time > 0 {
+			post.exceed385 = true
+		}
+		if hangzhanCount > 0 {
+			post.isHanzhan = true
+		}
+		if zhanwangCount > 0 {
+			post.isZhanwang = true
+		}
 	}
 	fmt.Println("结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
+	maleCount := 0   // 男患者个数
+	femaleCount := 0 // 女患者个数
+	below360MaleCount := 0
+	between375And380MaleCount := 0
+	between380And385MaleCount := 0
+	exceed385MaleCount := 0
+	hanzhanMaleCount := 0
+	zhanwangMaleCount := 0
+	below360FemaleCount := 0
+	between375And380FemaleCount := 0
+	between380And385FemaleCount := 0
+	exceed385FemaleCount := 0
+	hanzhanFemaleCount := 0
+	zhanwangFemaleCount := 0
+	for _, v := range postST {
+		if v.sex {
+			maleCount++
+			if v.below360 {
+				below360MaleCount++
+			}
+			if v.between375And380 {
+				between375And380MaleCount++
+			}
+			if v.between380And385 {
+				between380And385MaleCount++
+			}
+			if v.exceed385 {
+				exceed385MaleCount++
+			}
+			if v.isHanzhan {
+				hanzhanMaleCount++
+			}
+			if v.isZhanwang {
+				zhanwangMaleCount++
+			}
+		} else {
+			femaleCount++
+			if v.below360 {
+				below360FemaleCount++
+			}
+			if v.between375And380 {
+				between375And380FemaleCount++
+			}
+			if v.between380And385 {
+				between380And385FemaleCount++
+			}
+			if v.exceed385 {
+				exceed385FemaleCount++
+			}
+			if v.isHanzhan {
+				hanzhanFemaleCount++
+			}
+			if v.isZhanwang {
+				zhanwangFemaleCount++
+			}
+		}
+	}
+	fmt.Println("男个数: ", maleCount,
+		"低于360个数: ", below360MaleCount,
+		"大于375小于380个数: ", between375And380MaleCount,
+		"大于380小于385个数: ", between380And385MaleCount,
+		"超过385个数: ", exceed385MaleCount,
+		"寒战个数: ", hanzhanMaleCount,
+		"谵妄个数: ", zhanwangMaleCount)
+	fmt.Println("女个数: ", femaleCount,
+		"低于360个数: ", below360FemaleCount,
+		"大于375小于380个数: ", between375And380FemaleCount,
+		"大于380小于385个数: ", between380And385FemaleCount,
+		"超过385个数: ", exceed385FemaleCount,
+		"寒战个数: ", hanzhanFemaleCount,
+		"谵妄个数: ", zhanwangFemaleCount)
+	// 创建CSV文件，用于保存记录
+	csvFile1, err := os.Create("tcms_statistics1_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer csvFile1.Close()
+	_, _ = csvFile1.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w1 := csv.NewWriter(csvFile1)               //创建一个新的写入文件流
+	data1 := [][]string{
+		{"性别",
+			"低于36℃发生率",
+			"37.5-38.0℃发生率",
+			"38.0-38.5℃发生率",
+			"高于38.5℃发生率",
+			"寒战发生率",
+			"谵妄发生率",},
+		{
+			"男",
+			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)),
+		},
+		{
+			"女",
+			fmt.Sprintf("%f", float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(zhanwangFemaleCount)/float64(femaleCount)),
+		},
+		{
+			"全部",
+			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)+float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)+float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)+float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)+float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)+float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)+float64(zhanwangFemaleCount)/float64(femaleCount)),
+		},
+	}
+	err = w1.WriteAll(data1)
+	if err != nil {
+		checkErr(err)
+	}
+	w1.Flush()
 
+}
+
+func gen(postST *map[string]POST_ST) {
+	maleCount := 0   // 男患者个数
+	femaleCount := 0 // 女患者个数
+	below360MaleCount := 0
+	between375And380MaleCount := 0
+	between380And385MaleCount := 0
+	exceed385MaleCount := 0
+	hanzhanMaleCount := 0
+	zhanwangMaleCount := 0
+	below360FemaleCount := 0
+	between375And380FemaleCount := 0
+	between380And385FemaleCount := 0
+	exceed385FemaleCount := 0
+	hanzhanFemaleCount := 0
+	zhanwangFemaleCount := 0
+	for _, v := range postST {
+		if v.sex {
+			maleCount++
+			if v.below360 {
+				below360MaleCount++
+			}
+			if v.between375And380 {
+				between375And380MaleCount++
+			}
+			if v.between380And385 {
+				between380And385MaleCount++
+			}
+			if v.exceed385 {
+				exceed385MaleCount++
+			}
+			if v.isHanzhan {
+				hanzhanMaleCount++
+			}
+			if v.isZhanwang {
+				zhanwangMaleCount++
+			}
+		} else {
+			femaleCount++
+			if v.below360 {
+				below360FemaleCount++
+			}
+			if v.between375And380 {
+				between375And380FemaleCount++
+			}
+			if v.between380And385 {
+				between380And385FemaleCount++
+			}
+			if v.exceed385 {
+				exceed385FemaleCount++
+			}
+			if v.isHanzhan {
+				hanzhanFemaleCount++
+			}
+			if v.isZhanwang {
+				zhanwangFemaleCount++
+			}
+		}
+	}
+	fmt.Println("男个数: ", maleCount,
+		"低于360个数: ", below360MaleCount,
+		"大于375小于380个数: ", between375And380MaleCount,
+		"大于380小于385个数: ", between380And385MaleCount,
+		"超过385个数: ", exceed385MaleCount,
+		"寒战个数: ", hanzhanMaleCount,
+		"谵妄个数: ", zhanwangMaleCount)
+	fmt.Println("女个数: ", femaleCount,
+		"低于360个数: ", below360FemaleCount,
+		"大于375小于380个数: ", between375And380FemaleCount,
+		"大于380小于385个数: ", between380And385FemaleCount,
+		"超过385个数: ", exceed385FemaleCount,
+		"寒战个数: ", hanzhanFemaleCount,
+		"谵妄个数: ", zhanwangFemaleCount)
+	// 创建CSV文件，用于保存记录
+	csvFile1, err := os.Create("tcms_statistics1_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer csvFile1.Close()
+	_, _ = csvFile1.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w1 := csv.NewWriter(csvFile1)               //创建一个新的写入文件流
+	data1 := [][]string{
+		{"性别",
+			"低于36℃发生率",
+			"37.5-38.0℃发生率",
+			"38.0-38.5℃发生率",
+			"高于38.5℃发生率",
+			"寒战发生率",
+			"谵妄发生率",},
+		{
+			"男",
+			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)),
+			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)),
+		},
+		{
+			"女",
+			fmt.Sprintf("%f", float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(zhanwangFemaleCount)/float64(femaleCount)),
+		},
+		{
+			"全部",
+			fmt.Sprintf("%f", float64(below360MaleCount)/float64(maleCount)+float64(below360FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between375And380MaleCount)/float64(maleCount)+float64(between375And380FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(between380And385MaleCount)/float64(maleCount)+float64(between380And385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(exceed385MaleCount)/float64(maleCount)+float64(exceed385FemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(hanzhanMaleCount)/float64(maleCount)+float64(hanzhanFemaleCount)/float64(femaleCount)),
+			fmt.Sprintf("%f", float64(zhanwangMaleCount)/float64(maleCount)+float64(zhanwangFemaleCount)/float64(femaleCount)),
+		},
+	}
+	err = w1.WriteAll(data1)
+	if err != nil {
+		checkErr(err)
+	}
+	w1.Flush()
 }
