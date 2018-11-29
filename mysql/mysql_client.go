@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -27,8 +26,32 @@ func checkErr(err error) {
 const (
 	TEMP_TABLE_NAME      = "raiing_tcms_temp_data"
 	B2W_TABLE_NAME       = "raiing_tcms_b2w"
+	USER_TABLE_NAME      = "raiing_tcms_user"
+	EVENT_TABLE_NAME     = "raiing_tcms_event_data"
 	TEMPERATURE_INTERVAL = 4 // 温度间隔
 )
+
+type raiingTCMSUser struct {
+	id             int64
+	uuid           string
+	caseNum        string // 病人ID
+	bedNum         int
+	name           int
+	sex            int
+	birthday       string
+	model          int
+	height         int
+	weight         int
+	inHospitalTime int64
+	pacing         int
+	hospital       string
+	department     string
+	status         int
+	addTime        int64
+	addId          int
+	lastUpdateTime int64
+	lastUpdateId   int64
+}
 
 type raiingTCMSTempData struct {
 	id               int
@@ -63,18 +86,26 @@ type temperatureData struct {
 	AddTime     int64 `json:"add_time"`
 }
 
-type timeRange struct {
-	startTime int64
-	endTime   int64
+type raiingTCMSEventData struct {
+	id             int
+	uuid           string
+	casesId        string // 病人ID
+	userUuid       string
+	eventUuid      string
+	eventType      int
+	timezone       int
+	startTime      int64
+	endTime        int64
+	createTime     int64
+	updateTime     int64
+	detail         string
+	addTime        int64
+	lastUpdateTime int64
 }
-
-//type temperatureDataArray struct {
-//	dataArray []temperatureData
-//}
 
 func main() {
 	dbw := DbWorker{
-		Dsn: "root:123456@tcp(127.0.0.1:3306)/raiing_tcms_v6",
+		Dsn: "root:123456@tcp(127.0.0.1:3306)/raiing_tcms_v6_temp",
 	}
 	db, err := sql.Open("mysql",
 		dbw.Dsn)
@@ -84,34 +115,68 @@ func main() {
 	}
 	fmt.Println("数据库打开成功！")
 	defer db.Close()
-	rows1, err := db.Query("SELECT b2w_sn, hardware_sn FROM " + TEMP_TABLE_NAME)
+	//rows1, err := db.Query("SELECT b2w_sn, hardware_sn FROM " + TEMP_TABLE_NAME)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//b2wSNs := make(map[string]interface{}, 10)
+	//hardwareSNs := make(map[string]interface{}, 10)
+	//for rows1.Next() {
+	//	var b2wSN string
+	//	var hardwareSN string
+	//	err := rows1.Scan(&b2wSN, &hardwareSN)
+	//	checkErr(err)
+	//	b2wSNs[strings.Trim(b2wSN, " ")] = "_"
+	//	hardwareSNs[strings.Trim(hardwareSN, " ")] = "_"
+	//}
+	//fmt.Println("705序列号: ", len(hardwareSNs), hardwareSNs)
+	//fmt.Println("B2W序列号: ", len(b2wSNs), b2wSNs)
+
+	rows3, err := db.Query("SELECT uuid, case_num FROM " + USER_TABLE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
-	b2wSNs := make(map[string]interface{}, 10)
-	hardwareSNs := make(map[string]interface{}, 10)
-	for rows1.Next() {
-		var b2wSN string
-		var hardwareSN string
-		err := rows1.Scan(&b2wSN, &hardwareSN)
+	userUUIDS := make(map[string]string, 10) // 用户UUID
+	for rows3.Next() {
+		var userUUID string
+		var caseNum string
+		err := rows3.Scan(&userUUID, &caseNum)
 		checkErr(err)
-		b2wSNs[strings.Trim(b2wSN, " ")] = "_"
-		hardwareSNs[strings.Trim(hardwareSN, " ")] = "_"
+		userUUIDS[userUUID] = caseNum
 	}
-	fmt.Println("705序列号: ", len(hardwareSNs), hardwareSNs)
-	fmt.Println("B2W序列号: ", len(b2wSNs), b2wSNs)
+	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
+
 	fmt.Println("查询时间: ", time.Now().Format("2006-01-02 15:04:05"))
-	csvFile, err := os.Create("test.csv") //创建文件
+	// 创建CSV文件，用于保存记录
+	csvFile, err := os.Create("tcms_statistics_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer csvFile.Close()
 	_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w := csv.NewWriter(csvFile)                //创建一个新的写入文件流
+	data := []string{
+		"病例号", // 病人ID
+		"35<T≤36℃时长",
+		"T>37.5℃时长",
+		"37.5<T≤38.0℃时长",
+		"38.0<T≤38.5℃时长",
+		"T>38.5℃时长",
+		"最高体温",
+		"术后总测量时长",
+		"是否寒战",
+		"是否谵妄",
+	}
+	err = w.Write(data)
+	if err != nil {
+		checkErr(err)
+	}
+	w.Flush()
 
-	for k, _ := range hardwareSNs {
+	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
-		rows, err := db.Query("SELECT * FROM " + TEMP_TABLE_NAME + " WHERE hardware_sn =" + "\"" + k + "\"" + " ORDER BY time ASC")
+		rows, err := db.Query("SELECT * FROM " + TEMP_TABLE_NAME + " WHERE user_uuid =" + "\"" + k + "\"" + " ORDER BY time ASC")
 		//rows, err := stmt.Exec(k)
 		//if err != nil {
 		//	log.Fatal(err)
@@ -199,10 +264,30 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		// 查询事件
+		rows2, err := db.Query("SELECT * FROM " + EVENT_TABLE_NAME + " WHERE cases_id =" + "\"" + v + "\"")
+		if err != nil {
+			log.Fatal(err)
+		}
+		var event raiingTCMSEventData
+		var hangzhanCount int //寒战
+		var zhanwangCount int //谵妄
+		for rows2.Next() {
+			err := rows2.Scan(&event.id, &event.uuid, &event.casesId, &event.userUuid,
+				&event.eventUuid, &event.eventType, &event.timezone, &event.startTime,
+				&event.endTime, &event.createTime, &event.updateTime, &event.detail,
+				&event.addTime, &event.lastUpdateTime)
+			checkErr(err)
+			if event.eventType == 1018 || event.eventType == 3006 { // 出现寒战事件
+				hangzhanCount ++
+			} else if event.eventType == 1019 || event.eventType == 3009 { // 出现谵妄事件
+				zhanwangCount++
+			}
+		}
 
 		w := csv.NewWriter(csvFile) //创建一个新的写入文件流
 		data := []string{
-			k, // 705 SN号
+			v, // 病人ID
 			strconv.Itoa(int(between350And360)),
 			strconv.Itoa(int(exceed375Time)),
 			strconv.Itoa(int(between375And380)),
@@ -210,6 +295,8 @@ func main() {
 			strconv.Itoa(int(exceed385Time)),
 			strconv.Itoa(int(maxTemperature)),
 			strconv.Itoa(int(continueTime)),
+			strconv.Itoa(int(hangzhanCount)),
+			strconv.Itoa(int(zhanwangCount)),
 		}
 		err = w.Write(data)
 		if err != nil {
@@ -219,4 +306,5 @@ func main() {
 
 	}
 	fmt.Println("结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
+
 }
