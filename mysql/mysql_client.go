@@ -104,7 +104,7 @@ type raiingTCMSEventData struct {
 }
 
 // 术后统计
-type POST_ST struct {
+type PostSt struct {
 	sex              bool // 男true，女false
 	below360         bool
 	between375And380 bool
@@ -125,15 +125,17 @@ func main() {
 		return
 	}
 	fmt.Println("数据库打开成功！")
-	defer db.Close()
-
+	defer func() {
+		err = db.Close()
+		checkErr(err)
+	}()
 	rows3, err := db.Query("SELECT * FROM " + USER_TABLE_NAME)
 	if err != nil {
 		log.Fatal(err)
 	}
 	var userData raiingTCMSUser
 	userUUIDS := make(map[string]string, 10) // 用户UUID
-	postST := make(map[string]*POST_ST, 10)
+	postST := make(map[string]*PostSt, 10)
 
 	for rows3.Next() {
 		err := rows3.Scan(&userData.id, &userData.uuid, &userData.caseNum, &userData.bedNum, &userData.name,
@@ -143,43 +145,20 @@ func main() {
 		checkErr(err)
 		userUUIDS[userData.uuid] = userData.caseNum
 		if userData.sex == 1 { // 1为男性
-			postST[userData.uuid] = &POST_ST{sex: true}
+			postST[userData.uuid] = &PostSt{sex: true}
 		} else { // 2为女性
-			postST[userData.uuid] = &POST_ST{sex: false}
+			postST[userData.uuid] = &PostSt{sex: false}
 		}
 	}
 	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
-
 	fmt.Println("查询时间: ", time.Now().Format("2006-01-02 15:04:05"))
-	// 创建CSV文件，用于保存记录
-	csvFile, err := os.Create("tcms_statistics_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer csvFile.Close()
-	_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
-	w := csv.NewWriter(csvFile)                //创建一个新的写入文件流
-	data := []string{
-		"病例号", // 病人ID
-		"35<T≤36℃时长",
-		"T>37.5℃时长",
-		"37.5<T≤38.0℃时长",
-		"38.0<T≤38.5℃时长",
-		"T>38.5℃时长",
-		"最高体温",
-		"术后总测量时长",
-		"是否寒战",
-		"是否谵妄",
-	}
-	err = w.Write(data)
-	if err != nil {
-		checkErr(err)
-	}
-	w.Flush()
 
-	//userUUIDCount := 0
-
+	userTempST := make(chan UserTempDistribution, 20)
+	// 异步把温度分布写入文件
+	go func() {
+		saveUserTempDistribution(userTempST)
+	}()
+	userUUIDCount := 0
 	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
 		rows, err := db.Query("SELECT * FROM " + TEMP_TABLE_NAME + " WHERE user_uuid =" + "\"" + k + "\"" + " ORDER BY time ASC")
@@ -255,7 +234,7 @@ func main() {
 			checkErr(err)
 			count ++
 		}
-		fmt.Println("查询结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
+		fmt.Println("查询体温数据结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
 		fmt.Println("数据库记录条数: ", count)
 		if err != nil {
 			panic(err)
@@ -281,24 +260,17 @@ func main() {
 			}
 		}
 
-		w := csv.NewWriter(csvFile) //创建一个新的写入文件流
-		data := []string{
-			v, // 病人ID
-			fmt.Sprintf("%.2f", float64(between350And360)/60),
-			fmt.Sprintf("%.2f", float64(exceed375Time)/60),
-			fmt.Sprintf("%.2f", float64(between375And380)/60),
-			fmt.Sprintf("%.2f", float64(between380And385)/60),
-			fmt.Sprintf("%.2f", float64(exceed385Time)/60),
-			strconv.Itoa(int(maxTemperature)),
-			fmt.Sprintf("%.2f", float64(continueTime)/3600), // 小时
-			strconv.Itoa(int(hangzhanCount)),
-			strconv.Itoa(int(zhanwangCount)),
-		}
-		err = w.Write(data)
-		if err != nil {
-			checkErr(err)
-		}
-		w.Flush()
+		userTempDistribution := UserTempDistribution{v,
+			between350And360,
+			exceed375Time,
+			between375And380,
+			between380And385,
+			exceed385Time,
+			maxTemperature,
+			continueTime,
+			hangzhanCount,
+			zhanwangCount}
+		userTempST <- userTempDistribution
 
 		var post = postST[k]
 		if below360 > 0 {
@@ -319,18 +291,89 @@ func main() {
 		if zhanwangCount > 0 {
 			post.isZhanwang = true
 		}
-		//userUUIDCount ++
+		userUUIDCount ++
 		//if userUUIDCount > 10 {
 		//	break
 		//}
+		fmt.Println("用户个数: ", userUUIDCount, " ,查询结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
 	}
 	fmt.Println("结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
-
+	// 关闭channel
+	close(userTempST)
 	// 产生统计表格
-	gen(postST)
+	integratedAnalyze(postST)
 }
 
-func gen(postST map[string]*POST_ST) {
+type UserTempDistribution struct {
+	caseID           string
+	between350And360 int64
+	exceed375Time    int64
+	between375And380 int64
+	between380And385 int64
+	exceed385Time    int64
+	maxTemperature   int
+	continueTime     int64
+	hangzhanCount    int
+	zhanwangCount    int
+}
+
+// 保存用户温度分布
+func saveUserTempDistribution(ch chan UserTempDistribution) {
+	// 创建CSV文件，用于保存记录。术后的体温监测分布统计
+	csvFile, err := os.Create("tcms_post_operation_statistics_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer csvFile.Close()
+	_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w := csv.NewWriter(csvFile)                //创建一个新的写入文件流
+	data := []string{
+		"病例号", // 病人ID
+		"35<T≤36℃时长",
+		"T>37.5℃时长",
+		"37.5<T≤38.0℃时长",
+		"38.0<T≤38.5℃时长",
+		"T>38.5℃时长",
+		"最高体温",
+		"术后总测量时长",
+		"是否寒战",
+		"是否谵妄",
+	}
+	err = w.Write(data)
+	if err != nil {
+		checkErr(err)
+	}
+	w.Flush()
+	for {
+		data, ok := <-ch
+		if ok {
+			w := csv.NewWriter(csvFile) //创建一个新的写入文件流
+			dataString := []string{
+				data.caseID, // 病人ID
+				fmt.Sprintf("%.2f", float64(data.between350And360)/60),
+				fmt.Sprintf("%.2f", float64(data.exceed375Time)/60),
+				fmt.Sprintf("%.2f", float64(data.between375And380)/60),
+				fmt.Sprintf("%.2f", float64(data.between380And385)/60),
+				fmt.Sprintf("%.2f", float64(data.exceed385Time)/60),
+				strconv.Itoa(int(data.maxTemperature)),
+				fmt.Sprintf("%.2f", float64(data.continueTime)/3600), // 小时
+				strconv.Itoa(int(data.hangzhanCount)),
+				strconv.Itoa(int(data.zhanwangCount)),
+			}
+			err = w.Write(dataString)
+			if err != nil {
+				checkErr(err)
+			}
+			w.Flush()
+		} else {
+			fmt.Println("从channel读取温度数据失败")
+		}
+	}
+}
+
+// 整体分析
+func integratedAnalyze(postST map[string]*PostSt) {
 	maleCount := 0   // 男患者个数
 	femaleCount := 0 // 女患者个数
 	below360MaleCount := 0
@@ -402,8 +445,8 @@ func gen(postST map[string]*POST_ST) {
 		"超过385个数: ", exceed385FemaleCount,
 		"寒战个数: ", hanzhanFemaleCount,
 		"谵妄个数: ", zhanwangFemaleCount)
-	// 创建CSV文件，用于保存记录
-	csvFile1, err := os.Create("tcms_statistics1_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	// 创建CSV文件，用于保存记录, 术后的概率统计
+	csvFile1, err := os.Create("tcms_post_operation_probability_statistics_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
 		return
