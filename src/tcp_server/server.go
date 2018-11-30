@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func main() {
+func main03() {
 	var tcpListener, err = net.Listen("tcp", ":1125") //在刚定义好的地址上进监听请求。
 	if err != nil {
 		fmt.Println("监听出错：", err)

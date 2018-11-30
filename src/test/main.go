@@ -28,7 +28,7 @@ type KK struct {
 	b int
 }
 
-func main() {
+func main02() {
 
 	data := make(chan []string, 10)
 

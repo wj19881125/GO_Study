@@ -1,4 +1,4 @@
-package main
+package db_analyze
 
 import (
 	"database/sql"
@@ -23,13 +23,7 @@ func checkErr(err error) {
 	}
 }
 
-const (
-	TEMP_TABLE_NAME      = "raiing_tcms_temp_data"
-	B2W_TABLE_NAME       = "raiing_tcms_b2w"
-	USER_TABLE_NAME      = "raiing_tcms_user"
-	EVENT_TABLE_NAME     = "raiing_tcms_event_data"
-	TEMPERATURE_INTERVAL = 4 // 温度间隔
-)
+
 
 type raiingTCMSUser struct {
 	id             int64
@@ -129,7 +123,7 @@ func main01() {
 		err = db.Close()
 		checkErr(err)
 	}()
-	rows3, err := db.Query("SELECT * FROM " + USER_TABLE_NAME)
+	rows3, err := db.Query("SELECT * FROM " + UserTableName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -161,7 +155,7 @@ func main01() {
 	userUUIDCount := 0
 	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
-		rows, err := db.Query("SELECT * FROM " + TEMP_TABLE_NAME + " WHERE user_uuid =" + "\"" + k + "\"" + " ORDER BY time ASC")
+		rows, err := db.Query("SELECT * FROM " + TempTableName + " WHERE user_uuid =" + "\"" + k + "\"" + " ORDER BY time ASC")
 		//rows, err := stmt.Exec(k)
 		//if err != nil {
 		//	log.Fatal(err)
@@ -208,24 +202,24 @@ func main01() {
 				}
 				temperatureValue := data.Temp
 				if temperatureValue < 36000 {
-					below360 += TEMPERATURE_INTERVAL
+					below360 += TemperatureInterval
 				}
 				if temperatureValue > 35000 && temperatureValue <= 36000 {
-					between350And360 += TEMPERATURE_INTERVAL
+					between350And360 += TemperatureInterval
 				}
 				if temperatureValue > 37500 {
-					exceed375Time += TEMPERATURE_INTERVAL
+					exceed375Time += TemperatureInterval
 				}
 				if temperatureValue > 37500 && temperatureValue <= 38000 {
-					between375And380 += TEMPERATURE_INTERVAL
+					between375And380 += TemperatureInterval
 				}
 				if temperatureValue > 38000 && temperatureValue <= 38500 {
-					between380And385 += TEMPERATURE_INTERVAL
+					between380And385 += TemperatureInterval
 				}
 				if temperatureValue > 38500 {
-					exceed385Time += TEMPERATURE_INTERVAL
+					exceed385Time += TemperatureInterval
 				}
-				continueTime += TEMPERATURE_INTERVAL
+				continueTime += TemperatureInterval
 				if maxTemperature < temperatureValue {
 					maxTemperature = temperatureValue
 				}
@@ -240,7 +234,7 @@ func main01() {
 			panic(err)
 		}
 		// 查询事件
-		rows2, err := db.Query("SELECT * FROM " + EVENT_TABLE_NAME + " WHERE cases_id =" + "\"" + v + "\"")
+		rows2, err := db.Query("SELECT * FROM " + EventTableName + " WHERE cases_id =" + "\"" + v + "\"")
 		if err != nil {
 			log.Fatal(err)
 		}

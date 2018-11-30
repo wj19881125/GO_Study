@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-func main() {
+func main04() {
 	conn, err := net.Dial("tcp", "127.0.0.1:1125")
 	if err != nil {
 		fmt.Println("连接服务器出错, ", err)
