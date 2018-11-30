@@ -23,8 +23,6 @@ func checkErr(err error) {
 	}
 }
 
-
-
 type raiingTCMSUser struct {
 	id             int64
 	uuid           string
@@ -108,9 +106,14 @@ type PostSt struct {
 	isZhanwang       bool
 }
 
-func main01() {
+func AnalyzePostOperationData(user, password, ip, dbName string) {
+	if user == "" || password == "" || ip == "" || dbName == "" {
+		fmt.Println("传入的用户名等信息为空")
+		return
+	}
 	dbw := DbWorker{
-		Dsn: "root:123456@tcp(127.0.0.1:3306)/raiing_tcms_v6_temp",
+		//Dsn: "root:123456@tcp(127.0.0.1:3306)/raiing_tcms_v6_temp",
+		Dsn: user + ":" + password + "@tcp(" + ip + ")/" + dbName,
 	}
 	db, err := sql.Open("mysql",
 		dbw.Dsn)
@@ -314,7 +317,7 @@ type UserTempDistribution struct {
 // 保存用户温度分布
 func saveUserTempDistribution(ch chan UserTempDistribution) {
 	// 创建CSV文件，用于保存记录。术后的体温监测分布统计
-	csvFile, err := os.Create("手术后数据分布统计_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	csvFile, err := os.Create("手术后温度分布统计_" + GetTimeNow() + ".csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -440,7 +443,7 @@ func integratedAnalyze(postST map[string]*PostSt) {
 		"寒战个数: ", hanzhanFemaleCount,
 		"谵妄个数: ", zhanwangFemaleCount)
 	// 创建CSV文件，用于保存记录, 术后的概率统计
-	csvFile1, err := os.Create("手术后数据概率统计_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	csvFile1, err := os.Create("手术后温度概率统计_" + GetTimeNow() + ".csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
 		return

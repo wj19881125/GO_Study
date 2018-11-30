@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
@@ -24,6 +25,7 @@ var (
 	mDB *sql.DB
 	// 文件
 	mOutputRawDataFile *os.File
+	mOutputHrFile      *os.File
 
 	// 上一个输出数据的时间 单位 s
 	mLastOutputRawDataTime int
@@ -64,6 +66,7 @@ func main() {
 	if userUUID != "" {
 		// 查询数据
 		queryEcgRawData(userUUID)
+		queryEcgData(userUUID)
 	} else {
 		fmt.Println("--->失败，未找到指定的病人！")
 	}
@@ -153,7 +156,7 @@ func queryEcgRawData(userUUID string) {
 		if err != nil {
 			fmt.Println("--->queryEcgRawData: 解析行出错：", err.Error())
 		}
-		fmt.Println("--->查找到对应的数据：", time)
+		fmt.Println("--->查找到原始ECG数据：", time)
 		// 解析数据
 		resolveEcgRawData(time, dataAa, dataAb)
 	}
@@ -253,11 +256,17 @@ func getOutputRawEcgFile() *os.File {
 }
 
 // 关闭输出文件
-func closeOutputFile()  {
+func closeOutputFile() {
 	if mOutputRawDataFile != nil {
 		err := mOutputRawDataFile.Close()
 		if err != nil {
-			fmt.Println("--->关闭文件出错：", err)
+			fmt.Println("--->关闭文件（mOutputRawDataFile）出错：", err)
+		}
+	}
+	if mOutputHrFile != nil {
+		err := mOutputHrFile.Close()
+		if err != nil {
+			fmt.Println("--->关闭文件（mOutputHrFile）出错：", err)
 		}
 	}
 }
@@ -269,4 +278,93 @@ func getInteger(byte1 byte, byte2 byte, byte3 byte) int {
 		number = -(0xFFFFFF - number + 1)
 	}
 	return number
+}
+
+// 查询ECG数据
+func queryEcgData(userUUID string) {
+	if mDB == nil {
+		fmt.Println("--->queryEcgData:mDB为nil")
+		return
+	}
+	// 查询
+	rows, err := mDB.Query("select time, heart_rate_data from raiing_mpcms_ecg_data WHERE user_uuid = ? AND time >= ? AND time <= ?;", userUUID, mStartTime, mEndTime)
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println("--->queryEcgData:查询时出错：", err.Error())
+		return
+	}
+	// 解析行
+	for rows.Next() {
+		time := 0
+		var hrJson string
+		err := rows.Scan(&time, &hrJson)
+		if err != nil {
+			fmt.Println("--->queryEcgData:解析行出错：", err.Error())
+		}
+		fmt.Println("--->查找到ECG数据：", time)
+		// 解析数据
+		resolveEcgData(time,hrJson)
+	}
+	defer rows.Close()
+}
+
+// 解析ECG数据
+func resolveEcgData(time int, hrJson string) {
+	if hrJson != "" {
+		var hrList []int
+		err := json.Unmarshal([]byte(hrJson), &hrList)
+		if err == nil {
+			fmt.Println("--->当前分钟，HR的数量：", len(hrList))
+			// 输出ECG
+			outputEcg(time, hrList)
+		} else {
+			fmt.Println("--->解析Json失败：", err)
+		}
+	}
+}
+
+// 输出ECG
+func outputEcg(time int, hrList []int) {
+	outputHrFile := getOutputHRFile()
+	if outputHrFile == nil {
+		fmt.Println("--->outputEcg:获取File失败")
+		return
+	}
+
+	// 构建输出文本-HR
+	hrContentStr := ""
+	for index, item := range hrList {
+		hrContentStr += fmt.Sprintf("%d,%d\n", time + index, item)
+	}
+	// 输出
+	_, err := outputHrFile.WriteString(hrContentStr)
+	if err != nil {
+		fmt.Println("--->outputEcg:写File失败")
+	}
+}
+
+// 获取输出HR的File
+func getOutputHRFile() *os.File {
+	if mOutputHrFile == nil {
+		// 创建文件
+		outputFilePath := mOutputPath + "/HrResult.csv"
+		// 删除已经存在的文件
+		_, err := os.Stat(outputFilePath)
+		if err == nil || os.IsExist(err) {
+			fmt.Println("--->删除已经存在的结果文件")
+			err := os.Remove(outputFilePath)
+			if err != nil {
+				fmt.Println("--->getOutputHRFile:删除已经存在的结果文件失败：" + err.Error())
+				return nil
+			}
+		}
+		// 新建结果文件
+		file, err := os.Create(outputFilePath)
+		if err != nil {
+			fmt.Println("--->getOutputHRFile:新建结果文件失败：" + err.Error())
+			return nil
+		}
+		mOutputHrFile = file
+	}
+	return mOutputHrFile
 }

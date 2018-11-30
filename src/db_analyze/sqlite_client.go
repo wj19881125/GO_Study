@@ -1,16 +1,12 @@
 package db_analyze
 
 import (
-	"archive/zip"
-	"bytes"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
-	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -65,9 +61,13 @@ func ListDir(dirPth string) (err error) {
 	return nil
 }
 
-func AnalyzeInOperationData() {
+func AnalyzeInOperationData(originalPath string) {
+	//originalPath := "X:/GO/raw_data"
+	if originalPath == "" {
+		fmt.Println("传入的文件路径为空")
+		return
+	}
 	filePaths = make([]string, 0, 10)
-	originalPath := "X:/GO/raw_data"
 	err := ListDir(originalPath)
 	checkErr1(err)
 	//
@@ -166,7 +166,8 @@ type UserTempDistributionInOperation struct {
 // 保存术中的用户温度分布
 func saveUserTempDistributionInOperation(ch chan map[string]*UserTempDistributionInOperation) {
 	// 创建CSV文件，用于保存记录。术后的体温监测分布统计
-	csvFile, err := os.Create("手术中数据分布_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	//csvFile, err := os.Create("手术中数据分布_" + strconv.Itoa(int(time.Now().Unix())) + ".csv") //创建文件
+	csvFile, err := os.Create("手术中温度分布统计_" + GetTimeNow() + ".csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -212,54 +213,54 @@ func saveUserTempDistributionInOperation(ch chan map[string]*UserTempDistributio
 	}
 }
 
-func isZip(zipPath string) bool {
-	f, err := os.Open(zipPath)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
+//func isZip(zipPath string) bool {
+//	f, err := os.Open(zipPath)
+//	if err != nil {
+//		return false
+//	}
+//	defer f.Close()
+//
+//	buf := make([]byte, 4)
+//	if n, err := f.Read(buf); err != nil || n < 4 {
+//		return false
+//	}
+//
+//	return bytes.Equal(buf, []byte("PK\x03\x04"))
+//}
 
-	buf := make([]byte, 4)
-	if n, err := f.Read(buf); err != nil || n < 4 {
-		return false
-	}
-
-	return bytes.Equal(buf, []byte("PK\x03\x04"))
-}
-
-func unzip(archive, target string) error {
-	reader, err := zip.OpenReader(archive)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return err
-	}
-
-	for _, file := range reader.File {
-		path := filepath.Join(target, file.Name)
-		if file.FileInfo().IsDir() {
-			_ = os.MkdirAll(path, file.Mode())
-			continue
-		}
-
-		fileReader, err := file.Open()
-		if err != nil {
-			return err
-		}
-		defer fileReader.Close()
-
-		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-		if err != nil {
-			return err
-		}
-		defer targetFile.Close()
-
-		if _, err := io.Copy(targetFile, fileReader); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
+//func unzip(archive, target string) error {
+//	reader, err := zip.OpenReader(archive)
+//	if err != nil {
+//		return err
+//	}
+//
+//	if err := os.MkdirAll(target, 0755); err != nil {
+//		return err
+//	}
+//
+//	for _, file := range reader.File {
+//		path := filepath.Join(target, file.Name)
+//		if file.FileInfo().IsDir() {
+//			_ = os.MkdirAll(path, file.Mode())
+//			continue
+//		}
+//
+//		fileReader, err := file.Open()
+//		if err != nil {
+//			return err
+//		}
+//		fileReader.Close()
+//
+//		targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+//		if err != nil {
+//			return err
+//		}
+//		targetFile.Close()
+//
+//		if _, err := io.Copy(targetFile, fileReader); err != nil {
+//			return err
+//		}
+//	}
+//
+//	return nil
+//}
