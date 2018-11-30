@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
+	"io"
+	"os"
 	"strconv"
-	"time"
 )
 
 //var a = 12
@@ -28,27 +30,145 @@ type KK struct {
 	b int
 }
 
-func main02() {
+// 统计数据
+type StData struct {
+	caseID                        string
+	sex                           int
+	minTemperatureInOperation     int
+	between350And360InOperation   int64 // 手术中大于350，低于360
+	below360InOperation           int64 // 手术中低于360
+	between375And380InOperation   int64 // 手术中大于375，低于380
+	exceed380InOperation          int64 // 手术中大于380
+	exceed385InOperation          int64 // 手术中大于385
+	continueTimeInOperation       int64 // 手术中总测量时长
+	between350And360PostOperation int64 // 手术后大于350，小于360时长
+	below360PostOperation         int64
+	exceed375TimePostOperation    int64
+	between375And380PostOperation int64
+	between380And385PostOperation int64
+	exceed385TimePostOperation    int64
+	maxTemperaturePostOperation   int
+	continueTimePostOperation     int64
+	hangzhanCountPostOperation    int // 手术后寒战次数
+	zhanwangCountPostOperation    int // 手术后谵妄次数
+}
 
-	data := make(chan []string, 10)
-
-	count := 0
-
-	go func() {
-		for {
-			count++
-			data <- []string{"raiing" + strconv.Itoa(count)}
-			fmt.Println("子协程", "raiing"+strconv.Itoa(count))
-		}
-	}()
-
-	for {
-		data2, ok := <-data
-		if ok {
-			fmt.Println("主协程，", data2)
-		}
-		time.Sleep(time.Second)
+func main() {
+	csvFile, err := os.Open("X:/Golang/GO_Study/trunk/temp_file.csv") //创建文件
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
+	defer csvFile.Close()
+	fmt.Println("文件名称," + csvFile.Name())
+	//_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+
+	stDatas := make(map[string]*StData, 10)
+	r := csv.NewReader(csvFile)
+	for {
+		records, err := r.Read()
+		if err == io.EOF {
+			fmt.Println(err)
+			break
+		}
+		var stData StData
+		//var caseID string
+		//for _, data := range records {
+		//	print(data, ",")
+		//
+		//}
+		//println()
+		stData.caseID = records[0]
+		//println(stData.caseID)
+		intValue, err := strconv.Atoi(records[1])
+		stData.sex = intValue
+		intValue, err = strconv.Atoi(records[2])
+		stData.minTemperatureInOperation = intValue
+		intValue, err = strconv.Atoi(records[3])
+		stData.between350And360InOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[4])
+		stData.below360InOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[5])
+		stData.between375And380InOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[6])
+		stData.exceed380InOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[7])
+		stData.exceed385InOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[8])
+		stData.continueTimeInOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[9])
+		stData.between350And360PostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[10])
+		stData.below360PostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[11])
+		stData.exceed375TimePostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[12])
+		stData.between375And380PostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[13])
+		stData.between380And385PostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[14])
+		stData.exceed385TimePostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[15])
+		stData.maxTemperaturePostOperation = intValue
+		intValue, err = strconv.Atoi(records[16])
+		stData.continueTimePostOperation = int64(intValue)
+		intValue, err = strconv.Atoi(records[17])
+		stData.hangzhanCountPostOperation = intValue
+		intValue, err = strconv.Atoi(records[18])
+		stData.zhanwangCountPostOperation = intValue
+		value, ok := stDatas[stData.caseID ]
+		if ok {
+			if value.sex == 0 {
+				value.sex = stData.sex
+			}
+			if value.minTemperatureInOperation == 0 {
+				value.sex = stData.minTemperatureInOperation
+			}
+			if value.maxTemperaturePostOperation == 0 {
+				value.maxTemperaturePostOperation = stData.maxTemperaturePostOperation
+			}
+			value.between350And360InOperation += stData.between350And360InOperation
+			value.below360InOperation += stData.below360InOperation
+			value.between375And380InOperation += stData.between375And380InOperation
+			value.exceed380InOperation += stData.exceed380InOperation
+			value.exceed385InOperation += stData.exceed385InOperation
+			value.continueTimeInOperation += stData.continueTimeInOperation
+			value.between350And360PostOperation += stData.between350And360PostOperation
+			value.below360PostOperation += stData.below360PostOperation
+			value.exceed375TimePostOperation += stData.exceed375TimePostOperation
+			value.between375And380PostOperation += stData.between375And380PostOperation
+			value.between380And385PostOperation += stData.between380And385PostOperation
+			value.exceed385TimePostOperation += stData.exceed385TimePostOperation
+			value.continueTimePostOperation += stData.continueTimePostOperation
+			value.hangzhanCountPostOperation += stData.hangzhanCountPostOperation
+			value.zhanwangCountPostOperation += stData.zhanwangCountPostOperation
+		} else {
+			stDatas[stData.caseID] = &stData
+		}
+	}
+	for k := range stDatas {
+		fmt.Println(k)
+	}
+
+	//data := make(chan []string, 10)
+	//
+	//count := 0
+	//
+	//go func() {
+	//	for {
+	//		count++
+	//		data <- []string{"raiing" + strconv.Itoa(count)}
+	//		fmt.Println("子协程", "raiing"+strconv.Itoa(count))
+	//	}
+	//}()
+	//
+	//for {
+	//	data2, ok := <-data
+	//	if ok {
+	//		fmt.Println("主协程，", data2)
+	//	}
+	//	time.Sleep(time.Second)
+	//}
 
 	//return
 	//inta := 10
@@ -118,4 +238,5 @@ func main02() {
 	//fmt.Println("你好",new(d))
 	//e := 100
 	//fmt.Println("你好",e)
+
 }

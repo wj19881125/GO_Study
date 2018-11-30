@@ -7,10 +7,10 @@ import (
 
 const (
 	TempTableName       = "raiing_tcms_temp_data"
-	B2W_TABLE_NAME      = "raiing_tcms_b2w"
 	UserTableName       = "raiing_tcms_user"
 	EventTableName      = "raiing_tcms_event_data"
 	TemperatureInterval = 4 // 温度间隔
+	STDataTempFileName  = "temp_file.csv"
 )
 
 func GetTimeNow() string {
@@ -21,6 +21,6 @@ func GetTimeNow() string {
 	hour := timeNow.Hour()
 	minute := timeNow.Minute()
 	second := timeNow.Second()
-	timeStr := fmt.Sprintf("%d%d%d_%d%d_%d", year, month, day, hour, minute, second)
+	timeStr := fmt.Sprintf("%d%d%d_%d_%d_%d", year, month, day, hour, minute, second)
 	return timeStr
 }

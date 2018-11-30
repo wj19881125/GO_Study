@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
-	"time"
 )
 
 func checkErr1(err error) {
@@ -61,7 +60,7 @@ func ListDir(dirPth string) (err error) {
 	return nil
 }
 
-func AnalyzeInOperationData(originalPath string) {
+func AnalyzeInOperationData(originalPath string, ch chan<- StData) {
 	//originalPath := "X:/GO/raw_data"
 	if originalPath == "" {
 		fmt.Println("传入的文件路径为空")
@@ -74,9 +73,9 @@ func AnalyzeInOperationData(originalPath string) {
 	//dbNames := make([]string, 1, 10)
 	//dbNames[0] = "X:/Golang/GO_Study/trunk/TemperatureDbForERAS.db"
 	//dbNames = append(dbNames, "TemperatureDbForERAS.db")
-	userTempDistributionInOperationChan := make(chan map[string]*UserTempDistributionInOperation, 20)
-	// 保存统计结果
-	go func() { saveUserTempDistributionInOperation(userTempDistributionInOperationChan) }()
+	//userTempDistributionInOperationChan := make(chan map[string]*UserTempDistributionInOperation, 20)
+	//// 保存统计结果
+	//go func() { saveUserTempDistributionInOperation(userTempDistributionInOperationChan) }()
 	// 遍历所有数据库
 	for _, dbName := range filePaths {
 		fmt.Println("数据库名称: ", dbName)
@@ -115,11 +114,17 @@ func AnalyzeInOperationData(originalPath string) {
 				if data.temperature > 35000 && data.temperature <= 36000 {
 					value.between350And360 += TemperatureInterval
 				}
+				if data.temperature < 36000 {
+					value.below360 += TemperatureInterval
+				}
 				if data.temperature > 37500 && data.temperature <= 38000 {
 					value.between375And380 += TemperatureInterval
 				}
 				if data.temperature > 38000 {
-					value.exceed38 += TemperatureInterval
+					value.exceed380 += TemperatureInterval
+				}
+				if data.temperature > 38500 {
+					value.exceed385 += TemperatureInterval
 				}
 				value.continueTime += TemperatureInterval
 			} else {
@@ -132,35 +137,56 @@ func AnalyzeInOperationData(originalPath string) {
 				if data.temperature > 35000 && data.temperature <= 36000 {
 					userTempDistributionInOperation.between350And360 += TemperatureInterval
 				}
+				if data.temperature < 36000 {
+					userTempDistributionInOperation.below360 += TemperatureInterval
+				}
 				if data.temperature > 37500 && data.temperature <= 38000 {
 					userTempDistributionInOperation.between375And380 += TemperatureInterval
 				}
 				if data.temperature > 38000 {
-					userTempDistributionInOperation.exceed38 += TemperatureInterval
+					userTempDistributionInOperation.exceed380 += TemperatureInterval
+				}
+				if data.temperature > 38500 {
+					userTempDistributionInOperation.exceed385 += TemperatureInterval
 				}
 				userTempDistributionInOperation.continueTime += TemperatureInterval
 				// 插入元素
 				userTempDistributionInOperations[data.patientId] = &userTempDistributionInOperation
 			}
 		}
-		userTempDistributionInOperationChan <- userTempDistributionInOperations
+		for k, v := range userTempDistributionInOperations {
+			stData := StData{caseID: k,
+				minTemperatureInOperation:   v.minTemperature,
+				between350And360InOperation: v.between350And360,
+				below360InOperation:         v.below360,
+				between375And380InOperation: v.between375And380,
+				exceed380InOperation:        v.exceed380,
+				exceed385InOperation:        v.exceed385,
+				continueTimeInOperation:     v.continueTime,
+			}
+			// 输出数据
+			ch <- stData
+		}
+		//userTempDistributionInOperationChan <- userTempDistributionInOperations
 		// 关闭数据库
 		err = db.Close()
 		checkErr1(err)
 	}
 	// 保证程序可以正常退出
-	time.Sleep(time.Second * 5)
+	//time.Sleep(time.Second * 5)
 	// 关闭channel
-	close(userTempDistributionInOperationChan)
+	//close(userTempDistributionInOperationChan)
 }
 
 type UserTempDistributionInOperation struct {
 	caseID           string // 病例号
 	minTemperature   int    // 最低体温
-	between350And360 int    // 大于350小于等于360时长
-	between375And380 int    // 大于375，小于等于380时长
-	exceed38         int    // 超过38度时长
-	continueTime     int    // 总测量时长
+	between350And360 int64  // 大于350小于等于360时长
+	below360         int64  // 小于360时长
+	between375And380 int64  // 大于375，小于等于380时长
+	exceed380        int64  // 超过380度时长
+	exceed385        int64  // 超过385度时长
+	continueTime     int64  // 总测量时长
 }
 
 // 保存术中的用户温度分布
@@ -198,7 +224,7 @@ func saveUserTempDistributionInOperation(ch chan map[string]*UserTempDistributio
 					strconv.Itoa(int(v.minTemperature)),
 					fmt.Sprintf("%.2f", float64(v.between350And360)/60),
 					fmt.Sprintf("%.2f", float64(v.between375And380)/60),
-					fmt.Sprintf("%.2f", float64(v.exceed38)/60),
+					fmt.Sprintf("%.2f", float64(v.exceed380)/60),
 					fmt.Sprintf("%.2f", float64(v.continueTime)/3600), // 小时
 				}
 				err = w.Write(dataString)

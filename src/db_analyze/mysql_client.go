@@ -98,6 +98,7 @@ type raiingTCMSEventData struct {
 // 术后统计
 type PostSt struct {
 	sex              bool // 男true，女false
+	sexInt           int  // 男true，女false
 	below360         bool
 	between375And380 bool
 	between380And385 bool
@@ -106,7 +107,7 @@ type PostSt struct {
 	isZhanwang       bool
 }
 
-func AnalyzePostOperationData(user, password, ip, dbName string) {
+func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StData) {
 	if user == "" || password == "" || ip == "" || dbName == "" {
 		fmt.Println("传入的用户名等信息为空")
 		return
@@ -142,19 +143,19 @@ func AnalyzePostOperationData(user, password, ip, dbName string) {
 		checkErr(err)
 		userUUIDS[userData.uuid] = userData.caseNum
 		if userData.sex == 1 { // 1为男性
-			postST[userData.uuid] = &PostSt{sex: true}
+			postST[userData.uuid] = &PostSt{sex: true, sexInt: userData.sex}
 		} else { // 2为女性
-			postST[userData.uuid] = &PostSt{sex: false}
+			postST[userData.uuid] = &PostSt{sex: false, sexInt: userData.sex}
 		}
 	}
 	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
 	fmt.Println("查询时间: ", time.Now().Format("2006-01-02 15:04:05"))
 
-	userTempST := make(chan UserTempDistribution, 20)
+	//userTempST := make(chan UserTempDistribution, 20)
 	// 异步把温度分布写入文件
-	go func() {
-		saveUserTempDistribution(userTempST)
-	}()
+	//go func() {
+	//	saveUserTempDistribution(userTempST)
+	//}()
 	userUUIDCount := 0
 	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
@@ -257,37 +258,54 @@ func AnalyzePostOperationData(user, password, ip, dbName string) {
 			}
 		}
 
-		userTempDistribution := UserTempDistribution{v,
-			between350And360,
-			exceed375Time,
-			between375And380,
-			between380And385,
-			exceed385Time,
-			maxTemperature,
-			continueTime,
-			hangzhanCount,
-			zhanwangCount}
-		userTempST <- userTempDistribution
-
+		//userTempDistribution := UserTempDistribution{v,
+		//	between350And360,
+		//	below360,
+		//	exceed375Time,
+		//	between375And380,
+		//	between380And385,
+		//	exceed385Time,
+		//	maxTemperature,
+		//	continueTime,
+		//	hangzhanCount,
+		//	zhanwangCount}
+		//userTempST <- userTempDistribution
 		var post = postST[k]
-		if below360 > 0 {
-			post.below360 = true
+		stData := StData{caseID: v,
+			sex:                           post.sexInt,
+			between350And360PostOperation: between350And360,
+			below360PostOperation:         below360,
+			exceed375TimePostOperation:    exceed375Time,
+			between375And380PostOperation: between375And380,
+			between380And385PostOperation: between380And385,
+			exceed385TimePostOperation:    exceed385Time,
+			maxTemperaturePostOperation:   maxTemperature,
+			continueTimePostOperation:     continueTime,
+			hangzhanCountPostOperation:    hangzhanCount,
+			zhanwangCountPostOperation:    zhanwangCount,
 		}
-		if between375And380 > 0 {
-			post.between375And380 = true
-		}
-		if between380And385 > 0 {
-			post.between380And385 = true
-		}
-		if exceed385Time > 0 {
-			post.exceed385 = true
-		}
-		if hangzhanCount > 0 {
-			post.isHanzhan = true
-		}
-		if zhanwangCount > 0 {
-			post.isZhanwang = true
-		}
+		// 输出数据
+		ch <- stData
+
+		//var post = postST[k]
+		//if below360 > 0 {
+		//	post.below360 = true
+		//}
+		//if between375And380 > 0 {
+		//	post.between375And380 = true
+		//}
+		//if between380And385 > 0 {
+		//	post.between380And385 = true
+		//}
+		//if exceed385Time > 0 {
+		//	post.exceed385 = true
+		//}
+		//if hangzhanCount > 0 {
+		//	post.isHanzhan = true
+		//}
+		//if zhanwangCount > 0 {
+		//	post.isZhanwang = true
+		//}
 		userUUIDCount ++
 		//if userUUIDCount > 10 {
 		//	break
@@ -296,14 +314,16 @@ func AnalyzePostOperationData(user, password, ip, dbName string) {
 	}
 	fmt.Println("结束时间: ", time.Now().Format("2006-01-02 15:04:05"))
 	// 关闭channel
-	close(userTempST)
+	//close(userTempST)
 	// 产生统计表格
-	integratedAnalyze(postST)
+	//integratedAnalyze(postST)
+	close(ch) // 关闭通道
 }
 
 type UserTempDistribution struct {
 	caseID           string
 	between350And360 int64
+	below360         int64
 	exceed375Time    int64
 	between375And380 int64
 	between380And385 int64
