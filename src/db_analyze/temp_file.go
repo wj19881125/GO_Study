@@ -62,8 +62,8 @@ func SaveData(ch <-chan StData) {
 	}
 	defer csvFile.Close()
 
-	//_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
-	w := csv.NewWriter(csvFile) //创建一个新的写入文件流
+	_, _ = csvFile.WriteString("\xEF\xBB\xBF") // 写入UTF-8 BOM
+	w := csv.NewWriter(csvFile)                //创建一个新的写入文件流
 	data := []string{
 		"病例号", // 病人ID
 		"性别",  // 病人ID

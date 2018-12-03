@@ -105,6 +105,7 @@ type PostSt struct {
 	exceed385        bool
 	isHanzhan        bool
 	isZhanwang       bool
+	inHospitalTime   int64 // 进入病房时间
 }
 
 func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StData) {
@@ -143,9 +144,9 @@ func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StDat
 		checkErr(err)
 		userUUIDS[userData.uuid] = userData.caseNum
 		if userData.sex == 1 { // 1为男性
-			postST[userData.uuid] = &PostSt{sex: true, sexInt: userData.sex}
+			postST[userData.uuid] = &PostSt{sex: true, sexInt: userData.sex, inHospitalTime: userData.inHospitalTime}
 		} else { // 2为女性
-			postST[userData.uuid] = &PostSt{sex: false, sexInt: userData.sex}
+			postST[userData.uuid] = &PostSt{sex: false, sexInt: userData.sex, inHospitalTime: userData.inHospitalTime}
 		}
 	}
 	fmt.Println("用户UUID: ", len(userUUIDS), userUUIDS)
@@ -159,7 +160,9 @@ func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StDat
 	userUUIDCount := 0
 	for k, v := range userUUIDS {
 		//stmt, err := db.Prepare("SELECT * FROM " + TEMP_TABLE_NAME + "WHERE hardware_sn=?" + " ORDER BY time ASC")
-		rows, err := db.Query("SELECT * FROM " + TempTableName + " WHERE user_uuid =" + "\"" + k + "\"" + " ORDER BY time ASC")
+		// 只查询出病房的数据
+		rows, err := db.Query("SELECT * FROM " + TempTableName + " WHERE user_uuid =" + "\"" + k + "\"" + "AND time >" +
+			strconv.Itoa(int(postST[k].inHospitalTime)) + " ORDER BY time ASC")
 		//rows, err := stmt.Exec(k)
 		//if err != nil {
 		//	log.Fatal(err)
