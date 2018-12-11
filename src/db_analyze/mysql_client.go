@@ -108,7 +108,9 @@ type PostSt struct {
 	inHospitalTime   int64 // 进入病房时间
 }
 
-func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StData) {
+
+
+func AnalyzePostOperationData(user, password, ip, dbName string,  ch chan<- StData) {
 	if user == "" || password == "" || ip == "" || dbName == "" {
 		fmt.Println("传入的用户名等信息为空")
 		return
@@ -284,8 +286,8 @@ func AnalyzePostOperationData(user, password, ip, dbName string, ch chan<- StDat
 			exceed385TimePostOperation:    exceed385Time,
 			maxTemperaturePostOperation:   maxTemperature,
 			continueTimePostOperation:     continueTime,
-			hangzhanCountPostOperation:    hangzhanCount,
-			zhanwangCountPostOperation:    zhanwangCount,
+			chillCountPostOperation:       hangzhanCount,
+			deliriumCountPostOperation:    zhanwangCount,
 		}
 		// 输出数据
 		ch <- stData

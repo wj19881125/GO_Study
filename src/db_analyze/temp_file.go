@@ -27,8 +27,8 @@ type StData struct {
 	exceed385TimePostOperation    int64
 	maxTemperaturePostOperation   int
 	continueTimePostOperation     int64
-	hangzhanCountPostOperation    int // 手术后寒战次数
-	zhanwangCountPostOperation    int // 手术后谵妄次数
+	chillCountPostOperation       int // 手术后寒战次数
+	deliriumCountPostOperation    int // 手术后谵妄次数
 }
 
 func IsExists(path string) (bool, error) {
@@ -114,8 +114,8 @@ func SaveData(ch <-chan StData) {
 				strconv.Itoa(int(data.exceed385TimePostOperation)),
 				strconv.Itoa(int(data.maxTemperaturePostOperation)),
 				strconv.Itoa(int(data.continueTimePostOperation)),
-				strconv.Itoa(int(data.hangzhanCountPostOperation)),
-				strconv.Itoa(int(data.zhanwangCountPostOperation)),
+				strconv.Itoa(int(data.chillCountPostOperation)),
+				strconv.Itoa(int(data.deliriumCountPostOperation)),
 			}
 			err = w.Write(dataString)
 			if err != nil {
@@ -147,8 +147,8 @@ func SaveData(ch <-chan StData) {
 //	exceed385TimePostOperation    int64
 //	maxTemperaturePostOperation   int
 //	continueTimePostOperation     int64
-//	hangzhanCountPostOperation    int // 手术后寒战次数
-//	zhanwangCountPostOperation    int // 手术后谵妄次数
+//	chillCountPostOperation    int // 手术后寒战次数
+//	deliriumCountPostOperation    int // 手术后谵妄次数
 //}
 
 func AnalyzeCSVFile(filePath string) {
@@ -180,6 +180,9 @@ func AnalyzeCSVFile(filePath string) {
 		stData.caseID = records[0]
 		//println(stData.caseID)
 		intValue, err := strconv.Atoi(records[1])
+		if err != nil {
+			continue
+		}
 		stData.sex = intValue
 		intValue, err = strconv.Atoi(records[2])
 		stData.minTemperatureInOperation = intValue
@@ -212,9 +215,9 @@ func AnalyzeCSVFile(filePath string) {
 		intValue, err = strconv.Atoi(records[16])
 		stData.continueTimePostOperation = int64(intValue)
 		intValue, err = strconv.Atoi(records[17])
-		stData.hangzhanCountPostOperation = intValue
+		stData.chillCountPostOperation = intValue
 		intValue, err = strconv.Atoi(records[18])
-		stData.zhanwangCountPostOperation = intValue
+		stData.deliriumCountPostOperation = intValue
 		value, ok := stDatas[stData.caseID ]
 		if ok {
 			if value.sex == 0 {
@@ -239,8 +242,8 @@ func AnalyzeCSVFile(filePath string) {
 			value.between380And385PostOperation += stData.between380And385PostOperation
 			value.exceed385TimePostOperation += stData.exceed385TimePostOperation
 			value.continueTimePostOperation += stData.continueTimePostOperation
-			value.hangzhanCountPostOperation += stData.hangzhanCountPostOperation
-			value.zhanwangCountPostOperation += stData.zhanwangCountPostOperation
+			value.chillCountPostOperation += stData.chillCountPostOperation
+			value.deliriumCountPostOperation += stData.deliriumCountPostOperation
 		} else {
 			stDatas[stData.caseID] = &stData
 		}
@@ -306,8 +309,8 @@ func SaveUserTempDistribution(postST map[string]*StData) {
 			fmt.Sprintf("%.2f", float64(data.exceed385TimePostOperation)/60),
 			strconv.Itoa(int(data.maxTemperaturePostOperation)),
 			fmt.Sprintf("%.2f", float64(data.continueTimePostOperation)/3600), // 小时
-			strconv.Itoa(int(data.hangzhanCountPostOperation)),
-			strconv.Itoa(int(data.zhanwangCountPostOperation)),
+			strconv.Itoa(int(data.chillCountPostOperation)),
+			strconv.Itoa(int(data.deliriumCountPostOperation)),
 		}
 		err = w.Write(dataString)
 		if err != nil {
@@ -366,10 +369,10 @@ func IntegratedAnalyze(postST map[string]*StData) {
 			if v.exceed385TimePostOperation > 0 {
 				exceed385MaleCountPostOperation++
 			}
-			if v.hangzhanCountPostOperation > 0 {
+			if v.chillCountPostOperation > 0 {
 				hanzhanMaleCountPostOperation++
 			}
-			if v.zhanwangCountPostOperation > 0 {
+			if v.deliriumCountPostOperation > 0 {
 				zhanwangMaleCountPostOperation++
 			}
 		} else if v.sex == 2 {
@@ -397,10 +400,10 @@ func IntegratedAnalyze(postST map[string]*StData) {
 			if v.exceed385TimePostOperation > 0 {
 				exceed385FemaleCountPostOperation++
 			}
-			if v.hangzhanCountPostOperation > 0 {
+			if v.chillCountPostOperation > 0 {
 				hanzhanFemaleCountPostOperation++
 			}
-			if v.zhanwangCountPostOperation > 0 {
+			if v.deliriumCountPostOperation > 0 {
 				zhanwangFemaleCountPostOperation++
 			}
 		}
@@ -465,15 +468,15 @@ func IntegratedAnalyze(postST map[string]*StData) {
 		},
 		{
 			"全部",
-			fmt.Sprintf("%.2f", float64(below360MaleCountInOperation)/float64(maleCount)+float64(below360FemaleCountInOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(between375And380MaleCountInOperation)/float64(maleCount)+float64(between375And380FemaleCountInOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(exceed385MaleCountInOperation)/float64(maleCount)+float64(exceed385FemaleCountInOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(below360MaleCountPostOperation)/float64(maleCount)+float64(below360FemaleCountPostOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(between375And380MaleCountPostOperation)/float64(maleCount)+float64(between375And380FemaleCountPostOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(between380And385MaleCountPostOperation)/float64(maleCount)+float64(between380And385FemaleCountPostOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(exceed385MaleCountPostOperation)/float64(maleCount)+float64(exceed385FemaleCountPostOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(hanzhanMaleCountPostOperation)/float64(maleCount)+float64(hanzhanFemaleCountPostOperation)/float64(femaleCount)),
-			fmt.Sprintf("%.2f", float64(zhanwangMaleCountPostOperation)/float64(maleCount)+float64(zhanwangFemaleCountPostOperation)/float64(femaleCount)),
+			fmt.Sprintf("%.2f", float64(below360MaleCountInOperation+below360FemaleCountInOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(between375And380MaleCountInOperation+between375And380FemaleCountInOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(exceed385MaleCountInOperation+exceed385FemaleCountInOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(below360MaleCountPostOperation+below360FemaleCountPostOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(between375And380MaleCountPostOperation+between375And380FemaleCountPostOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(between380And385MaleCountPostOperation+between380And385FemaleCountPostOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(exceed385MaleCountPostOperation+exceed385FemaleCountPostOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(hanzhanMaleCountPostOperation+hanzhanFemaleCountPostOperation)/float64(maleCount+femaleCount)),
+			fmt.Sprintf("%.2f", float64(zhanwangMaleCountPostOperation+zhanwangFemaleCountPostOperation)/float64(maleCount+femaleCount)),
 		},
 	}
 	err = w1.WriteAll(data1)

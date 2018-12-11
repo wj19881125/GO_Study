@@ -27,7 +27,7 @@ func main() {
 	password := os.Args[3]
 	//ip := "127.0.0.1:3306"
 	ip := os.Args[4]
-	dbName := "raiing_tcms_v6_temp"
+	dbName := "raiing_tcms_v6_20181204"
 	// 3. 保存文件名
 	// 4. 保存文件路径
 
