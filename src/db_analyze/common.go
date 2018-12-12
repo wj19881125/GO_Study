@@ -20,7 +20,7 @@ func GetTimeNow() string {
 	day := timeNow.Day()
 	hour := timeNow.Hour()
 	minute := timeNow.Minute()
-	second := timeNow.Second()
-	timeStr := fmt.Sprintf("%d%d%d_%d_%d_%d", year, month, day, hour, minute, second)
+	//second := timeNow.Second()
+	timeStr := fmt.Sprintf("%d%02d%02d_%02d%02d", year, month, day, hour, minute)
 	return timeStr
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"db_analyze_pro"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -54,6 +55,10 @@ type StData struct {
 }
 
 func main() {
+	fmt.Println(db_analyze_pro.GetTimeNow())
+}
+
+func main01() {
 	csvFile, err := os.Open("X:/Golang/GO_Study/trunk/temp_file.csv") //创建文件
 	if err != nil {
 		fmt.Println(err)
